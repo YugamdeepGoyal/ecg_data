@@ -1,6 +1,8 @@
 # ECG Heartbeat Anomaly Detection with LSTM and Bidirectional LSTM
 
-Binary classification of heartbeats (normal versus abnormal) on the ECG5000 benchmark dataset, using recurrent neural networks built with TensorFlow and Keras. The project compares a plain LSTM against a Bidirectional LSTM under identical preprocessing, seeding, and training settings.
+Binary classification of heartbeats (normal versus abnormal) on the ECG5000 benchmark dataset, using recurrent neural networks built with TensorFlow and Keras. The project compares a plain LSTM against a Bidirectional LSTM under identical preprocessing, seeding, and training settings, and includes an interactive Streamlit demo.
+
+Live demo: add the link here after deployment.
 
 ## Summary
 
@@ -151,6 +153,18 @@ Plain LSTM ROC curve:
 4. The main weakness of both models is missed abnormal beats. Because the AUC is high, this is largely a matter of the decision threshold rather than a lack of separability. In a screening setting, a lower threshold would trade a small amount of precision for higher recall.
 5. Early stopping selected the best validation epoch, and the learning rate schedule reduced the rate in steps as validation loss plateaued.
 
+## Interactive Demo
+
+The Streamlit app lets you browse the 4,500 test heartbeats and compare both models on any beat.
+
+- Choose a random beat, a random normal beat, a random abnormal beat, or a specific test index.
+- See the selected beat plotted against the average normal beat, along with its true label and, for abnormal beats, the beat type.
+- See the abnormal probability from each model and whether each prediction matches the true label.
+- Move the decision threshold slider to see how the threshold changes the predictions.
+- View the test metrics and saved figures on the Results tab.
+
+The app uses the saved models and the saved scaler, so it needs no dataset download at run time. The raw test beats are stored in `demo_data/` by `export_demo_data.py`.
+
 ## Limitations
 
 - Results come from a single run per model with seed 42. Differences of about one percentage point between models could partly be due to random variation. Averaging over several seeds would give a more reliable comparison.
@@ -164,13 +178,19 @@ Plain LSTM ROC curve:
 ```
 .
 ├── src/
-│   └── load_data.py             Dataset download and parsing functions
-├── model_1.ipynb                Bidirectional LSTM experiment
-├── model_plain_lstm.ipynb       Plain LSTM experiment
-├── images/                      Saved figures (training curves, ROC curves)
-├── checkpoints/                 Saved best model weights
-├── logs/                        TensorBoard logs
-├── scaler/                      Fitted StandardScaler files
+│   └── load_data.py                 Dataset download and parsing functions
+├── model.ipynb                      Bidirectional LSTM experiment
+├── model_plain_lstm.ipynb           Plain LSTM experiment
+├── app.py                           Streamlit demo application
+├── export_demo_data.py              Exports the raw test beats for the demo
+├── demo_data/                       Test beats and labels used by the demo
+├── images/                          Saved figures (training curves, ROC curves)
+├── checkpoints/                     Saved best models (Bidirectional LSTM and plain LSTM)
+├── scaler/                          Fitted StandardScaler
+├── logs/                            TensorBoard logs (not tracked in Git)
+├── requirements.txt                 Dependencies for the demo
+├── requirements_notebooks.txt       Dependencies for the training notebooks
+├── .gitignore
 └── README.md
 ```
 
@@ -179,29 +199,55 @@ Plain LSTM ROC curve:
 Requirements:
 
 - Python 3.12
-- TensorFlow and Keras
-- NumPy
-- scikit-learn
-- Matplotlib
-- Seaborn
-- joblib
-- kagglehub
+- TensorFlow 2.16.2 and Keras
+- NumPy, scikit-learn, Matplotlib, Seaborn, joblib, kagglehub (notebooks)
+- Streamlit and pandas (demo)
 
-Create and activate a virtual environment, then install the dependencies:
+The training notebooks and the demo use separate virtual environments. Recent Streamlit releases require a newer protobuf than TensorFlow 2.16.2 supports, so installing both in one environment can break TensorFlow. The pinned versions in `requirements.txt` avoid this conflict.
+
+Training environment:
 
 ```bash
 python -m venv tf_env
 source tf_env/bin/activate
-pip install tensorflow numpy scikit-learn matplotlib seaborn joblib kagglehub
+pip install -r requirements_notebooks.txt
+```
+
+Demo environment:
+
+```bash
+python -m venv demo_env
+source demo_env/bin/activate
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-1. Open `model_1.ipynb` to run the Bidirectional LSTM experiment, or `model_plain_lstm.ipynb` for the plain LSTM experiment.
-2. Run the cells from top to bottom. The dataset is downloaded automatically on the first run through `kagglehub`.
-3. Figures are saved to `images/`, the best model to `checkpoints/`, and the fitted scaler to `scaler/`.
+### Train the models
+
+1. Activate the training environment.
+2. Open `model.ipynb` to run the Bidirectional LSTM experiment, or `model_plain_lstm.ipynb` for the plain LSTM experiment.
+3. Run the cells from top to bottom. The dataset is downloaded automatically on the first run through `kagglehub`.
+4. Figures are saved to `images/`, the best models to `checkpoints/`, and the fitted scaler to `scaler/`.
 
 To view training curves interactively, launch TensorBoard from the project folder and point it at the `logs` directory.
+
+### Run the demo
+
+1. Activate the demo environment.
+2. Export the test beats once (this step needs `kagglehub` and Kaggle access, so run it in the training environment if it is not installed in the demo environment):
+
+```bash
+python export_demo_data.py
+```
+
+3. Start the app from the project folder:
+
+```bash
+python -m streamlit run app.py
+```
+
+The app opens at `http://localhost:8501`. The exported files and the committed models and scaler are already included in the repository, so a fresh clone can skip step 2.
 
 ## Reproducibility
 
@@ -212,8 +258,8 @@ The notebooks set the Python, NumPy, and TensorFlow random seeds to 42 and enabl
 - Compare against a one-dimensional convolutional network and a classical baseline such as logistic regression.
 - Repeat training over multiple seeds and report the mean and standard deviation.
 - Select the decision threshold on a validation set to improve recall on abnormal beats.
+- Add a threshold analysis showing recall and false alarms across thresholds.
 - Extend to the original five-class problem with class weighting for the rare classes.
-- Add an interactive demo application for classifying a selected heartbeat.
 
 ## Acknowledgments
 
