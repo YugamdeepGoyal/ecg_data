@@ -128,7 +128,6 @@ if "idx" not in st.session_state:
     draw_beat()
 
 # Header
-
 st.title("ECG Heartbeat Anomaly Detection")
 st.write(
     "Two neural networks, trained on thousands of recorded heartbeats, "
