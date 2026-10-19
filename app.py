@@ -135,7 +135,7 @@ st.write(
     "try to tell normal heartbeats from abnormal ones. Pick a heartbeat and see what they decide."
 )
 st.caption(
-    "Research and portfolio project on a public benchmark dataset. "
+    "Portfolio project on a public benchmark dataset. "
     "Not a medical device and not for diagnosis."
 )
 
