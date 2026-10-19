@@ -172,4 +172,8 @@ $RECYCLE.BIN/
 *.lnk
 
 logs
-checkpoints
+checkpoints/*
+!checkpoints/best_model.keras
+!checkpoints/plain_lstm/
+checkpoints/plain_lstm/*
+!checkpoints/plain_lstm/best_model.keras
