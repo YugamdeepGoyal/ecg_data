@@ -155,15 +155,35 @@ Plain LSTM ROC curve:
 
 ## Interactive Demo
 
-The Streamlit app lets you browse the 4,500 test heartbeats and compare both models on any beat.
+Live demo: https://ecg-data.streamlit.app
 
-- Choose a random beat, a random normal beat, a random abnormal beat, or a specific test index.
-- See the selected beat plotted against the average normal beat, along with its true label and, for abnormal beats, the beat type.
-- See the abnormal probability from each model and whether each prediction matches the true label.
-- Move the decision threshold slider to see how the threshold changes the predictions.
-- View the test metrics and saved figures on the Results tab.
+### What it is
 
-The app uses the saved models and the saved scaler, so it needs no dataset download at run time. The raw test beats are stored in `demo_data/` by `export_demo_data.py`.
+The demo is a small web application for exploring what the two trained models do on real heartbeats. It runs in a browser, so nothing needs to be installed. It draws from the 4,500 heartbeats of the held-out test set, which the models never saw during training. The demo is a way to inspect the classifiers on individual examples. It is not a tool for analyzing new patient recordings.
+
+### How to use it
+
+The page has three tabs.
+
+1. Try it: choose the kind of heartbeat (any, normal, or abnormal) and press the button to draw a random one. The page shows the heartbeat plotted against the average normal heartbeat, the label recorded in the dataset (including the abnormality type for abnormal beats), and the verdict of each model with its estimated chance of abnormal. Each verdict is marked correct or incorrect, followed by a one-line summary of whether the models agree.
+2. Performance: the test metrics for both models and the saved training and ROC figures.
+3. About: a short description of the data, the models, the limitations, and a link to the source code.
+
+An optional "Advanced" section on the first tab contains the decision threshold. A heartbeat is called abnormal when the model's chance of abnormal is above the threshold, which is 50 percent by default. Lowering it catches more abnormal beats at the cost of more false alarms.
+
+### Why it is useful
+
+- Access: a reader can evaluate the project in seconds, without cloning the repository or installing TensorFlow.
+- Transparency: it shows individual successes and failures, not only summary metrics. Visitors can look for heartbeats the models get wrong and see that some are genuinely hard to tell apart.
+- Model comparison: both models are run on the same heartbeat, so the difference between the LSTM and the Bidirectional LSTM can be seen on concrete examples. Cases where only one model is correct are called out.
+- Threshold trade-off: the threshold control shows how recall and false alarms trade off. This supports the finding that the main weakness of both models is recall at the default 0.5 threshold, not their ability to separate the two classes.
+- End-to-end check: the demo loads the saved models and the saved scaler and applies them exactly as in training. This confirms that preprocessing, saving, loading, and inference work outside the notebook.
+
+### What it is not
+
+The demo does not accept new recordings. It classifies heartbeats from the public ECG5000 test set only. It is a demonstration of the models for learning and portfolio purposes, not a diagnostic tool, and it must not be used for medical decisions.
+
+The app files are `app.py` and `export_demo_data.py`. The exported test beats are stored in `demo_data/`.
 
 ## Limitations
 
