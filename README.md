@@ -1,8 +1,8 @@
-# ECG Heartbeat Anomaly Detection with LSTM and Bidirectional LSTM
+# ECG Heartbeat Anomaly Detection: LSTM, Bidirectional LSTM and XGBoost
 
-Binary classification of heartbeats (normal versus abnormal) on the ECG5000 benchmark dataset, using recurrent neural networks built with TensorFlow and Keras. The project compares a plain LSTM against a Bidirectional LSTM under identical preprocessing, seeding, and training settings, and includes an interactive Streamlit demo.
+Binary classification of heartbeats (normal versus abnormal) on the ECG5000 benchmark dataset. The project compares two recurrent neural networks built with TensorFlow and Keras (a plain LSTM and a Bidirectional LSTM) against a tuned XGBoost classifier trained on the raw signal values. It includes an interactive Streamlit demo of the two neural networks.
 
-Live demo: add the link here after deployment.
+Live demo: https://ecg-data.streamlit.app
 
 ## Summary
 
@@ -10,14 +10,17 @@ Live demo: add the link here after deployment.
 | :- | :- | :- | :- | :- | :- |
 | LSTM | 96.22% | 91.19% | 99.71% | 0.953 | 0.9957 |
 | Bidirectional LSTM | 97.29% | 93.65% | 99.83% | 0.966 | 0.9968 |
+| XGBoost | 97.20% | 94.07% | 99.16% | 0.965 | 0.9974 |
 
-All figures are measured on 4,500 heartbeats that the models never saw during training. The Bidirectional LSTM is the stronger model on every metric, and its main advantage is higher recall on abnormal beats (119 missed beats compared with 165 for the plain LSTM).
+All figures are measured on 4,500 heartbeats that the models never saw during training. The Bidirectional LSTM outperforms the plain LSTM on every metric. A tuned XGBoost classifier trained on the raw signal values performs on par with the Bidirectional LSTM: the two differ by 4 correctly classified beats out of 4,500, which is well within run-to-run variation. On this benchmark, the extra complexity of a recurrent network brings no measurable advantage over a tree ensemble.
+
+Note that the comparison is not equal in tuning effort: XGBoost's hyperparameters were selected by cross-validated search over 40 candidate settings, while the two neural networks use one fixed architecture and were not tuned.
 
 ## Problem Statement
 
 An electrocardiogram (ECG) records the electrical activity of the heart. Each heartbeat has a characteristic shape, and deviations from that shape can indicate arrhythmias. The goal of this project is to classify a single recorded heartbeat as normal or abnormal directly from its raw signal, without hand-crafted features.
 
-This is a sequence classification task. The order of values within a heartbeat matters, which makes recurrent architectures a natural fit.
+This is a sequence classification task. The order of values within a heartbeat carries information, which motivates recurrent architectures. The project also tests whether a model that ignores the sequence structure and treats the 140 values as independent columns can do as well.
 
 ## Dataset
 
@@ -53,16 +56,16 @@ The official UCR split of 500 training and 4,500 test samples is kept as is. Thi
 
 ## Method
 
-### Preprocessing
+### Preprocessing for the neural networks
 
 1. Load the `.ts` files and parse each row into 140 signal values and a label.
 2. Convert labels to binary.
 3. Standardize the signal with `StandardScaler`. The scaler is fit on the training set only and then applied to the test set, which prevents information from the test set leaking into training.
 4. Reshape the arrays to `(samples, 140, 1)`, the input shape expected by recurrent layers.
 
-### Models
+### Neural network models
 
-Both models share the same structure. The only difference is the recurrent layer.
+The two networks share the same structure. The only difference is the recurrent layer.
 
 | Layer | LSTM model | Bidirectional LSTM model |
 | :- | :- | :- |
@@ -73,7 +76,7 @@ Both models share the same structure. The only difference is the recurrent layer
 
 A Bidirectional LSTM reads each heartbeat forward and backward and combines both views. This suits the task because each heartbeat is fully recorded before classification, so the later part of the signal can inform the interpretation of the earlier part.
 
-### Training Configuration
+Training configuration:
 
 | Setting | Value |
 | :- | :- |
@@ -87,17 +90,33 @@ A Bidirectional LSTM reads each heartbeat forward and backward and combines both
 | ModelCheckpoint | Save the best model by validation loss |
 | TensorBoard | Separate log directory for each model |
 
+### XGBoost baseline
+
+XGBoost treats each heartbeat as 140 independent numeric features. It has no built-in notion of time order, which makes it a useful baseline for the recurrent models.
+
+| Setting | Value |
+| :- | :- |
+| Features | The 140 raw signal values, no scaling |
+| Hyperparameter search | RandomizedSearchCV, 40 candidates |
+| Cross-validation | 5-fold stratified, on the training set only |
+| Search metric | ROC AUC |
+| Other settings | Histogram tree method, random seed 42 |
+
+The test set is used once, after the search, to produce the reported numbers. The best parameters found are shown in the XGBoost notebook.
+
 ## Results
 
 ### Test Set Performance
 
-| Metric | LSTM | Bidirectional LSTM |
-| :- | :- | :- |
-| Accuracy | 0.9622 | 0.9729 |
-| Recall (abnormal) | 0.9119 | 0.9365 |
-| Precision (abnormal) | 0.9971 | 0.9983 |
-| F1 score | 0.9526 | 0.9664 |
-| ROC AUC | 0.9957 | 0.9968 |
+| Metric | LSTM | Bidirectional LSTM | XGBoost |
+| :- | :- | :- | :- |
+| Accuracy | 0.9622 | 0.9729 | 0.9720 |
+| Recall (abnormal) | 0.9119 | 0.9365 | 0.9407 |
+| Precision (abnormal) | 0.9971 | 0.9983 | 0.9916 |
+| F1 score | 0.9526 | 0.9664 | 0.9655 |
+| ROC AUC | 0.9957 | 0.9968 | 0.9974 |
+| Missed abnormal beats | 165 | 119 | 111 |
+| False alarms | 5 | 3 | 15 |
 
 ### Confusion Matrices (Test Set)
 
@@ -117,15 +136,25 @@ Bidirectional LSTM:
 | Actual normal | 2,624 | 3 |
 | Actual abnormal | 119 | 1,754 |
 
-### Training Versus Test (Bidirectional LSTM)
+XGBoost:
 
-| Metric | Train | Test |
+| | Predicted normal | Predicted abnormal |
 | :- | :- | :- |
-| Accuracy | 0.990 | 0.973 |
-| Recall (abnormal) | 0.981 | 0.936 |
-| ROC AUC | 0.999 | 0.997 |
+| Actual normal | 2,612 | 15 |
+| Actual abnormal | 111 | 1,762 |
 
-The gap between training and test performance is small, which indicates that the model generalizes well.
+### Training Versus Test
+
+| Model | Metric | Train | Test |
+| :- | :- | :- | :- |
+| Bidirectional LSTM | Accuracy | 0.990 | 0.973 |
+| Bidirectional LSTM | Recall (abnormal) | 0.981 | 0.936 |
+| Bidirectional LSTM | ROC AUC | 0.999 | 0.997 |
+| XGBoost | Accuracy | 0.998 | 0.972 |
+| XGBoost | Recall (abnormal) | 0.995 | 0.941 |
+| XGBoost | ROC AUC | 1.000 | 0.997 |
+
+Both models generalize well. XGBoost fits the 500 training beats almost perfectly, which is typical of tree ensembles on small data, and its test performance is still excellent.
 
 ### Figures
 
@@ -147,11 +176,13 @@ Plain LSTM ROC curve:
 
 ## Discussion
 
-1. Both models separate the two classes very well, with ROC AUC above 0.995. The difference in AUC between them is small (about 0.001).
-2. The larger difference appears in recall at the default 0.5 threshold. The Bidirectional LSTM detects 46 more abnormal beats than the plain LSTM.
-3. Both models are very precise. They rarely flag a normal beat as abnormal (3 and 5 false alarms out of 2,627 normal beats).
-4. The main weakness of both models is missed abnormal beats. Because the AUC is high, this is largely a matter of the decision threshold rather than a lack of separability. In a screening setting, a lower threshold would trade a small amount of precision for higher recall.
-5. Early stopping selected the best validation epoch, and the learning rate schedule reduced the rate in steps as validation loss plateaued.
+1. All three models separate the two classes very well, with ROC AUC above 0.995. Differences in AUC between them are at most 0.002.
+2. The Bidirectional LSTM improves on the plain LSTM on every metric. It detects 46 more abnormal beats and raises fewer false alarms.
+3. XGBoost on the raw signal matches the Bidirectional LSTM. Accuracy differs by 0.1 percentage points, which corresponds to 4 beats out of 4,500. With a single run per model, this should be read as a tie, not a ranking. Because XGBoost was tuned and the neural networks were not, this comparison favors XGBoost. Tuning the networks (units, dropout, learning rate, depth) could narrow or reverse the small differences seen here, so the result should not be read as showing that trees are better than recurrent networks in general.
+4. The models make different kinds of errors. XGBoost misses fewer abnormal beats (111 against 119) but raises more false alarms (15 against 3). The Bidirectional LSTM is more conservative.
+5. A plausible explanation for the strong tree result is that ECG5000 heartbeats are already segmented and aligned to 140 fixed time points, so each column corresponds to a similar phase of the heartbeat and trees can split on individual positions directly. This explanation has not been tested in this project.
+6. The main weakness of all models is missed abnormal beats at the default 0.5 threshold. Because the AUC is high, this is largely a matter of the decision threshold, not a lack of separability. In a screening setting, a lower threshold would trade some precision for higher recall.
+7. Early stopping selected the best validation epoch for the neural networks, and the learning rate schedule reduced the rate in steps as validation loss plateaued.
 
 ## Interactive Demo
 
@@ -159,7 +190,7 @@ Live demo: https://ecg-data.streamlit.app
 
 ### What it is
 
-The demo is a small web application for exploring what the two trained models do on real heartbeats. It runs in a browser, so nothing needs to be installed. It draws from the 4,500 heartbeats of the held-out test set, which the models never saw during training. The demo is a way to inspect the classifiers on individual examples. It is not a tool for analyzing new patient recordings.
+The demo is a small web application for exploring what the two trained neural networks do on real heartbeats. It runs in a browser, so nothing needs to be installed. It draws from the 4,500 heartbeats of the held-out test set, which the models never saw during training. It is a way to inspect the classifiers on individual examples, not a tool for analyzing new recordings. The XGBoost baseline is reported in this README but is not part of the demo.
 
 ### How to use it
 
@@ -175,22 +206,19 @@ An optional "Advanced" section on the first tab contains the decision threshold.
 
 - Access: a reader can evaluate the project in seconds, without cloning the repository or installing TensorFlow.
 - Transparency: it shows individual successes and failures, not only summary metrics. Visitors can look for heartbeats the models get wrong and see that some are genuinely hard to tell apart.
-- Model comparison: both models are run on the same heartbeat, so the difference between the LSTM and the Bidirectional LSTM can be seen on concrete examples. Cases where only one model is correct are called out.
-- Threshold trade-off: the threshold control shows how recall and false alarms trade off. This supports the finding that the main weakness of both models is recall at the default 0.5 threshold, not their ability to separate the two classes.
-- End-to-end check: the demo loads the saved models and the saved scaler and applies them exactly as in training. This confirms that preprocessing, saving, loading, and inference work outside the notebook.
+- Model comparison: both networks run on the same heartbeat, so the difference between the LSTM and the Bidirectional LSTM can be seen on concrete examples.
+- Threshold trade-off: the threshold control shows how recall and false alarms trade off, which supports the finding that the main weakness is recall at the default threshold.
+- End-to-end check: the demo loads the saved models and the saved scaler and applies them exactly as in training, which confirms that preprocessing, saving, loading, and inference work outside the notebook.
 
-### What it is not
-
-The demo does not accept new recordings. It classifies heartbeats from the public ECG5000 test set only. It is a demonstration of the models for learning and portfolio purposes, not a diagnostic tool, and it must not be used for medical decisions.
-
-The app files are `app.py` and `export_demo_data.py`. The exported test beats are stored in `demo_data/`.
+The app files are `app.py` and `export_demo_data.py`. The exported test beats are stored in `demo_data/`. The free hosting tier puts inactive apps to sleep, so the first visit after a quiet period may take about a minute to start.
 
 ## Limitations
 
-- Results come from a single run per model with seed 42. Differences of about one percentage point between models could partly be due to random variation. Averaging over several seeds would give a more reliable comparison.
-- The validation set contains only 75 heartbeats, so validation curves are noisy and should be interpreted cautiously.
-- Only one dataset was used. Performance on signals from other devices, patients, or recording conditions is unknown.
-- The binary formulation merges four abnormal beat types, so the model does not identify which type of abnormality is present.
+- Results come from a single run per model with seed 42. Differences of about one percentage point between models could be due to random variation. Averaging over several seeds would give a more reliable comparison.
+- The tuning effort is not equal across models. XGBoost was tuned with cross-validated search over 40 candidate settings, while the neural networks use one fixed architecture and a 75-beat validation split for early stopping.
+- The validation set for the neural networks contains only 75 heartbeats, so validation curves are noisy and should be interpreted cautiously.
+- Only one dataset was used, and it is a clean, pre-aligned benchmark. Performance on signals from other devices, patients, or recording conditions is unknown.
+- The binary formulation merges four abnormal beat types, so the models do not identify which type of abnormality is present.
 - This project is a machine learning exercise on a public benchmark. It is not a medical device and must not be used for diagnosis or clinical decisions.
 
 ## Project Structure
@@ -201,15 +229,18 @@ The app files are `app.py` and `export_demo_data.py`. The exported test beats ar
 │   └── load_data.py                 Dataset download and parsing functions
 ├── model.ipynb                      Bidirectional LSTM experiment
 ├── model_plain_lstm.ipynb           Plain LSTM experiment
+├── model_xgboost.ipynb              XGBoost baseline
 ├── app.py                           Streamlit demo application
 ├── export_demo_data.py              Exports the raw test beats for the demo
 ├── demo_data/                       Test beats and labels used by the demo
 ├── images/                          Saved figures (training curves, ROC curves)
 ├── checkpoints/                     Saved best models (Bidirectional LSTM and plain LSTM)
 ├── scaler/                          Fitted StandardScaler
+├── models/                          Saved XGBoost model
 ├── logs/                            TensorBoard logs (not tracked in Git)
 ├── requirements.txt                 Dependencies for the demo
 ├── requirements_notebooks.txt       Dependencies for the training notebooks
+├── requirements_xgboost.txt         Dependencies for the XGBoost notebook
 ├── .gitignore
 └── README.md
 ```
@@ -220,7 +251,7 @@ Requirements:
 
 - Python 3.12
 - TensorFlow 2.16.2 and Keras
-- NumPy, scikit-learn, Matplotlib, Seaborn, joblib, kagglehub (notebooks)
+- NumPy, pandas, scikit-learn, Matplotlib, Seaborn, joblib, kagglehub, XGBoost (notebooks)
 - Streamlit and pandas (demo)
 
 The training notebooks and the demo use separate virtual environments. Recent Streamlit releases require a newer protobuf than TensorFlow 2.16.2 supports, so installing both in one environment can break TensorFlow. The pinned versions in `requirements.txt` avoid this conflict.
@@ -246,9 +277,9 @@ pip install -r requirements.txt
 ### Train the models
 
 1. Activate the training environment.
-2. Open `model.ipynb` to run the Bidirectional LSTM experiment, or `model_plain_lstm.ipynb` for the plain LSTM experiment.
+2. Open `model.ipynb` to run the Bidirectional LSTM experiment, `model_plain_lstm.ipynb` for the plain LSTM experiment, or `model_xgboost.ipynb` for the XGBoost baseline.
 3. Run the cells from top to bottom. The dataset is downloaded automatically on the first run through `kagglehub`.
-4. Figures are saved to `images/`, the best models to `checkpoints/`, and the fitted scaler to `scaler/`.
+4. Figures are saved to `images/`, the neural network models to `checkpoints/`, the fitted scaler to `scaler/`, and the XGBoost model to `models/`.
 
 To view training curves interactively, launch TensorBoard from the project folder and point it at the `logs` directory.
 
@@ -271,15 +302,17 @@ The app opens at `http://localhost:8501`. The exported files and the committed m
 
 ## Reproducibility
 
-The notebooks set the Python, NumPy, and TensorFlow random seeds to 42 and enable deterministic TensorFlow operations. Restart the kernel and run all cells in order to reproduce the reported numbers. Exact values may differ across hardware, operating systems, and TensorFlow versions.
+The neural network notebooks set the Python, NumPy, and TensorFlow random seeds to 42 and enable deterministic TensorFlow operations. The XGBoost search uses random seed 42 for both the cross-validation splits and the sampling of candidate settings. Restart the kernel and run all cells in order to reproduce the reported numbers. Exact values may differ across hardware, operating systems, and library versions.
 
 ## Possible Extensions
 
-- Compare against a one-dimensional convolutional network and a classical baseline such as logistic regression.
-- Repeat training over multiple seeds and report the mean and standard deviation.
-- Select the decision threshold on a validation set to improve recall on abnormal beats.
-- Add a threshold analysis showing recall and false alarms across thresholds.
+- Repeat training over multiple seeds for every model and report the mean and standard deviation.
+- Give the neural networks a comparable tuning budget, for example with Keras Tuner, and compare again.
+- Compare against a one-dimensional convolutional network.
+- Check which time steps XGBoost relies on, using feature importance or SHAP, and compare with where the recurrent models focus.
+- Select the decision threshold on a validation set to improve recall on abnormal beats, and report recall and false alarms across thresholds.
 - Extend to the original five-class problem with class weighting for the rare classes.
+- Add the XGBoost model to the demo as a third column.
 
 ## Acknowledgments
 
